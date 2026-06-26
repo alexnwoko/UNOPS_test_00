@@ -12,3 +12,4 @@ wheels/
 
 # os
 .DS_Store
+DEPLOY.md
