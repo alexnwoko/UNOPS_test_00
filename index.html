@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Disaster Tweet Classifier</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --muted:#94a3b8; --text:#e2e8f0;
+    --accent:#38bdf8; --danger:#f87171; --safe:#34d399; --border:#334155;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(160deg,#0f172a,#111827);color:var(--text);min-height:100vh;
+    display:flex;align-items:flex-start;justify-content:center;padding:32px 16px}
+  .wrap{width:100%;max-width:640px}
+  h1{font-size:1.5rem;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:.9rem;margin:0 0 20px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:6px}
+  textarea{width:100%;min-height:96px;resize:vertical;background:#0b1220;color:var(--text);
+    border:1px solid var(--border);border-radius:10px;padding:12px;font-size:1rem;line-height:1.4}
+  textarea:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+  button{background:var(--accent);color:#062338;border:none;border-radius:10px;padding:11px 18px;
+    font-size:.95rem;font-weight:600;cursor:pointer;transition:opacity .15s}
+  button:hover{opacity:.9}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .examples{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .chip{background:#0b1220;border:1px solid var(--border);color:var(--muted);border-radius:999px;
+    padding:6px 12px;font-size:.8rem;cursor:pointer}
+  .chip:hover{border-color:var(--accent);color:var(--text)}
+  .result{margin-top:18px;border-radius:12px;padding:16px;display:none}
+  .result.show{display:block}
+  .verdict{font-size:1.15rem;font-weight:700;display:flex;align-items:center;gap:10px}
+  .badge{font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    padding:3px 10px;border-radius:999px}
+  .barwrap{height:10px;background:#0b1220;border-radius:999px;margin-top:14px;overflow:hidden;border:1px solid var(--border)}
+  .bar{height:100%;width:0;transition:width .5s ease}
+  .meta{color:var(--muted);font-size:.82rem;margin-top:10px}
+  .err{color:var(--danger);font-size:.9rem;margin-top:14px;display:none}
+  .err.show{display:block}
+  .spinner{width:18px;height:18px;border:3px solid rgba(255,255,255,.25);border-top-color:#062338;
+    border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .foot{color:var(--muted);font-size:.75rem;margin-top:18px;line-height:1.5}
+  details{margin-top:12px}
+  summary{cursor:pointer;color:var(--muted);font-size:.8rem}
+  input.api{width:100%;margin-top:6px;background:#0b1220;color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:8px;font-size:.8rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Disaster Tweet Classifier</h1>
+  <p class="sub">Predicts whether a short text describes a <strong>real disaster</strong> (1) or not (0).</p>
+
+  <div class="card">
+    <label for="text">Enter a tweet or short text</label>
+    <textarea id="text" placeholder="e.g. Forest fire near La Ronge Sask. Canada"></textarea>
+
+    <div class="examples" id="examples">
+      <span class="chip">Forest fire near La Ronge Sask. Canada</span>
+      <span class="chip">Just had the best pizza of my life 🍕</span>
+      <span class="chip">7.1 earthquake hits the coast, buildings collapsed</span>
+      <span class="chip">This party is absolutely on fire tonight!</span>
+    </div>
+
+    <div class="row">
+      <button id="go">Analyze</button>
+      <span id="loading" style="display:none;color:var(--muted);font-size:.9rem">
+        <span class="spinner"></span> Analyzing…
+      </span>
+    </div>
+
+    <div class="result" id="result">
+      <div class="verdict">
+        <span id="verdictText"></span>
+        <span class="badge" id="badge"></span>
+      </div>
+      <div class="barwrap"><div class="bar" id="bar"></div></div>
+      <div class="meta" id="meta"></div>
+    </div>
+
+    <div class="err" id="error"></div>
+
+    <details>
+      <summary>Advanced: API endpoint</summary>
+      <input class="api" id="apiBase" placeholder="(defaults to this site's /predict)" />
+    </details>
+  </div>
+
+  <p class="foot">
+    The model is a TF-IDF + logistic-regression classifier (probability calibrated). It reflects
+    patterns in ~7,600 labeled tweets and can be wrong on sarcasm, metaphor ("on fire"), or
+    unfamiliar events. Treat the score as a signal, not ground truth.
+  </p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const textEl = $("text"), goBtn = $("go"), loading = $("loading");
+const resultEl = $("result"), errorEl = $("error");
+
+$("examples").addEventListener("click", (e) => {
+  if (e.target.classList.contains("chip")) { textEl.value = e.target.textContent; textEl.focus(); }
+});
+
+function apiUrl() {
+  const override = $("apiBase").value.trim();
+  const base = override ? override.replace(/\/+$/, "") : "";
+  return base + "/predict";
+}
+
+function showError(msg){ errorEl.textContent = msg; errorEl.classList.add("show"); }
+function clearError(){ errorEl.classList.remove("show"); errorEl.textContent = ""; }
+
+async function analyze(){
+  clearError();
+  resultEl.classList.remove("show");
+  const text = textEl.value.trim();
+  if (!text){ showError("Please enter some text first."); return; }
+
+  goBtn.disabled = true; loading.style.display = "inline";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000); // 10s guard
+
+  try {
+    const res = await fetch(apiUrl(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok){
+      let detail = "";
+      try { detail = (await res.json()).error || ""; } catch(_){}
+      showError(`Server returned ${res.status}. ${detail}`); return;
+    }
+    const data = await res.json();
+    render(data);
+  } catch (err) {
+    if (err.name === "AbortError") showError("Request timed out (>10s). Please try again.");
+    else showError("Network error — could not reach the API. Check your connection and try again.");
+  } finally {
+    goBtn.disabled = false; loading.style.display = "none";
+    clearTimeout(timeout);
+  }
+}
+
+function render(data){
+  const isDisaster = data.label === 1;
+  const pct = Math.round((data.score ?? 0) * 100);
+  const conf = isDisaster ? pct : 100 - pct; // confidence in the chosen label
+  $("verdictText").textContent = isDisaster ? "Real disaster" : "Not a disaster";
+  const badge = $("badge");
+  badge.textContent = "label " + data.label;
+  badge.style.background = isDisaster ? "rgba(248,113,113,.18)" : "rgba(52,211,153,.18)";
+  badge.style.color = isDisaster ? "#f87171" : "#34d399";
+  const bar = $("bar");
+  bar.style.width = pct + "%";
+  bar.style.background = isDisaster ? "var(--danger)" : "var(--safe)";
+  $("meta").innerHTML =
+    `P(disaster) = <strong>${(data.score).toFixed(3)}</strong> &middot; ` +
+    `confidence in this label ≈ <strong>${conf}%</strong>`;
+  resultEl.classList.add("show");
+}
+
+goBtn.addEventListener("click", analyze);
+textEl.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") analyze();
+});
+</script>
+</body>
+</html>

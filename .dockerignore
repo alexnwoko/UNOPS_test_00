@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+wheels/
+train.csv
+test.csv
+*.csv
+.git/
+.gitignore
+DEPLOY.md
+WRITE-UP.md
+AI-DISCLOSURE.md
+.DS_Store

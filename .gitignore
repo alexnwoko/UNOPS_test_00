@@ -1,0 +1,14 @@
+# data (public Kaggle dataset — download separately; not needed to run the container)
+train.csv
+test.csv
+*.csv
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+wheels/
+
+# os
+.DS_Store
